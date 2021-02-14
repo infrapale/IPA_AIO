@@ -17,15 +17,18 @@
 // or ethernet clients.
 //#define  VILLA_ASTRID 1
 #define  LILLA_ASTRID 1
+//#include "secrets.h"
 #include "config.h"
 
-#include "secrets.h"
+
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
 #include <bme680.h>
 #include <bme680_defs.h>
+
+//AdafruitIO_WiFi io(IO_USERNAME, IO_KEY, WIFI_SSID, WIFI_PASS);
 /*
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -66,17 +69,17 @@ AdafruitIO_Feed *ldr_feed[] = {
   io.feed("Tupa-LDR-3"),
   io.feed("Tupa-LDR-4"),
   io.feed("Tupa-LDR-5") 
-}
+};
 
 void select_ldr(uint8_t ldr_idx){
     for (uint8_t i =0;i<5;i++)
     {
         if(i==ldr_idx) {
-           pinMode(ldr_select_pin(i), OUTPUT); 
-           digitalWrite(ldr_select_pin(i), LOW);
+           pinMode(ldr_select_pin[i], OUTPUT); 
+           digitalWrite(ldr_select_pin[i], LOW);
         } 
         else {
-           pinMode(ldr_select_pin(i), INPUT);        
+           pinMode(ldr_select_pin[i], INPUT);        
         }
       
     }
@@ -167,8 +170,10 @@ void loop() {
     temperature->save(bme.temperature);
     humidity->save(bme.humidity);
     for(uint8_t i=0; i < 5; i++){
-        ldr_value = analogRead(ldr_select_pin[i]);
-        delay(10);
+        select_ldr(i);
+        delay(1);
+        ldr_value = analogRead(LDR_PIN);
+        Serial.print(F("LDR:      ")); Serial.print(ldr_value); Serial.println(F(" "));  
         ldr_feed[i]->save(ldr_value);
     }
     //led_red->onMessage(handleMessage);
@@ -179,7 +184,6 @@ void loop() {
     Serial.print(F("Temp:     ")); Serial.print(bme.temperature); Serial.println(F(" C"));
     Serial.print(F("Hum:      ")); Serial.print(bme.humidity); Serial.println(F(" %"));
     Serial.print(F("LDR:      ")); Serial.print(ldr_value); Serial.println(F(" "));
-    Serial.display();
  
   // Adafruit IO is rate limited for publishing, so a delay is required in
   // between feed->save events. In this example, we will wait three seconds
@@ -197,5 +201,5 @@ void handleMessage(AdafruitIO_Data *data) {
   else
     Serial.println("LOW");
 
-  digitalWrite(LED_RED, data->toPinLevel());
+  //digitalWrite(LED_RED, data->toPinLevel());
 }

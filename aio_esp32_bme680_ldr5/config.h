@@ -1,6 +1,6 @@
 
 /************************ Adafruit IO Config *******************************/
-#include <secrets.h>
+
 /******************************* WIFI **************************************/
 
 // the AdafruitIO_WiFi client will work with the following boards:
@@ -16,6 +16,8 @@
 //   - Adafruit AirLift Shield -> https://www.adafruit.com/product/4285
 //   - Adafruit AirLift FeatherWing -> https://www.adafruit.com/product/4264
 
+#define  LILLA_ASTRID 1
+#include <secrets.h>
 // uncomment the following line if you are using airlift
 // #define USE_AIRLIFT
 
@@ -24,7 +26,6 @@
 
 // comment out the following lines if you are using fona or ethernet
 #include "AdafruitIO_WiFi.h"
-#include <secrets.h>
 
 #if defined(USE_AIRLIFT) || defined(ADAFRUIT_METRO_M4_AIRLIFT_LITE) ||         \
     defined(ADAFRUIT_PYPORTAL)
