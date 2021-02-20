@@ -46,29 +46,30 @@
 #define LED_BLUE     25
 #define LDR_PIN      34
 */
-#define LDR_PIN      25
+#define LDR_PIN      34
+#define NBR_LDR_RES  5
 
 #define SEALEVELPRESSURE_HPA (1013.25)
 
 Adafruit_BME680 bme; // I2C
-
+byte            iot_state = 0;
 /************************ Example Starts Here *******************************/
 
 // this int will hold the current count for our sketch
 int count = 0;
 uint16_t   ldr_value;
-uint8_t ldr_select_pin[] = {15,16,17,18,19};
+uint8_t ldr_select_pin[NBR_LDR_RES] = {15,16,17,18,19};
 
 // set up the 'counter' feed
-AdafruitIO_Feed *temperature = io.feed("tupa-bme680-temp");
-AdafruitIO_Feed *humidity    = io.feed("tupa-bme680-humidity");
+AdafruitIO_Feed *temperature = io.feed("villaastrid.tupa-bme680-temp");
+AdafruitIO_Feed *humidity    = io.feed("villaastrid.tupa-bme680-humidity");
 // AdafruitIO_Feed *led_red     = io.feed("home-tampere.esp32test-led-red");
 AdafruitIO_Feed *ldr_feed[] = {
-  io.feed("Tupa-LDR-1"),
-  io.feed("Tupa-LDR-2"),
-  io.feed("Tupa-LDR-3"),
-  io.feed("Tupa-LDR-4"),
-  io.feed("Tupa-LDR-5") 
+  io.feed("villaastrid.tupa-ldr-1"),
+  io.feed("villaastrid.tupa-ldr-2"),
+  io.feed("villaastrid.tupa-ldr-3"),
+  io.feed("villaastrid.tupa-ldr-4"),
+  io.feed("villaastrid.tupa-ldr-5") 
 };
 
 void select_ldr(uint8_t ldr_idx){
@@ -97,6 +98,7 @@ void setup() {
     while(! Serial);
 
     pinMode(LED_YELLOW, OUTPUT);
+    pinMode(LDR_PIN,INPUT);
     digitalWrite(LED_YELLOW,HIGH);
 
     select_ldr(99);  /* none selected */
@@ -104,7 +106,7 @@ void setup() {
     Serial.print("Connecting to Adafruit IO");
     Serial.println(F("BME680 test"));
     delay(2000);
-    if (!bme.begin()) {
+    if (!bme.begin(0x76)) {
         Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
         while (1);
     }
@@ -133,7 +135,7 @@ void setup() {
 }
 
 void loop() {
-
+   
     // io.run(); is required for all sketches.
     // it should always be present at the top of your loop
     // function. it keeps the client connected to
@@ -164,18 +166,33 @@ void loop() {
 
     if (!bme.endReading()) {
         Serial.println(F("Failed to complete reading :("));
-        return;
+        // return;
     }
     // Send and receive data from AIO
-    temperature->save(bme.temperature);
-    humidity->save(bme.humidity);
-    for(uint8_t i=0; i < 5; i++){
-        select_ldr(i);
-        delay(1);
-        ldr_value = analogRead(LDR_PIN);
-        Serial.print(F("LDR:      ")); Serial.print(ldr_value); Serial.println(F(" "));  
-        ldr_feed[i]->save(ldr_value);
+    switch (iot_state) {
+        case 0:
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+            select_ldr(iot_state);
+            delay(1);
+            ldr_value = analogRead(LDR_PIN);
+            Serial.print(F("LDR:  ")); Serial.print(iot_state); Serial.print(":  "); Serial.print(ldr_value); Serial.println(F(" "));  
+            ldr_feed[iot_state]->save(ldr_value);
+            break;
+
+        case 5:
+            temperature->save(bme.temperature);
+            break;
+        case 6:    
+            humidity->save(bme.humidity);
+            break;
     }
+    iot_state++;
+    if (iot_state > 6 ){
+      iot_state = 0;
+    } 
     //led_red->onMessage(handleMessage);
     
     Serial.print(F("Reading completed at "));
