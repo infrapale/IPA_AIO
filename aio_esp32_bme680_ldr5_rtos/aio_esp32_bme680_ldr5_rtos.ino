@@ -57,7 +57,7 @@ byte            iot_state = 0;
 
 // this int will hold the current count for our sketch
 int count = 0;
-uint16_t   ldr_value;
+uint16_t   ldr_value[NBR_LDR_RES];
 uint8_t ldr_select_pin[NBR_LDR_RES] = {15,16,17,18,19};
 
 // set up the 'counter' feed
@@ -72,25 +72,20 @@ AdafruitIO_Feed *ldr_feed[] = {
   io.feed("villaastrid.tupa-ldr-5") 
 };
 
-static SemaphoreHandle_t  aio_sema_handle;
 
-void select_ldr(uint8_t ldr_idx){
-    for (uint8_t i =0;i<5;i++)
-    {
-        if(i==ldr_idx) {
-           pinMode(ldr_select_pin[i], OUTPUT); 
-           digitalWrite(ldr_select_pin[i], LOW);
-        } 
-        else {
-           pinMode(ldr_select_pin[i], INPUT);        
-        }
-      
-    }
-   pinMode(LED_YELLOW, OUTPUT);
-}
+
+static SemaphoreHandle_t  aio_sema_handle;
+void StartTasks(void){
+void TaskReadBme680( void *pvParameters );
+void TaskReadLight( void *pvParameters );
+void TaskSendAio( void *pvParameters );
+void TaskPrintValues( void *pvParameters );
+
+void select_ldr(uint8_t ldr_idx);
+
 
 // 
-//infrapale/feeds/home-tampere.esp32test-temp"
+
 void setup() {
     BaseType_t rc;
     // start the serial connection
@@ -100,42 +95,12 @@ void setup() {
     while(! Serial);
 
     pinMode(LED_YELLOW, OUTPUT);
+    digitalWrite(LED_YELLOW,LOW);
+
     pinMode(LDR_PIN,INPUT);
-    digitalWrite(LED_YELLOW,HIGH);
-    select_ldr(99);  /* none selected */
+    select_ldr(0);
 
-    aio_sema_handle = xSemaphoreCreateBinary();
-    assert(aio_sema_handle);
-    rc = xTaskCreatePinnedToCore(
-     range_task,
-     "rangetsk",
-     2048, // Stack size
-     nullptr,
-     1, // Priority
-     &h, // Task handle
-     app_cpu // CPU
-     );
-    assert(rc == pdPASS);
-    assert(h);
-
-    
- 
     Serial.print("Connecting to Adafruit IO");
-    Serial.println(F("BME680 test"));
-    delay(2000);
-    if (!bme.begin(0x76)) {
-        Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
-        while (1);
-    }
-    bme.setTemperatureOversampling(BME680_OS_8X);
-    bme.setHumidityOversampling(BME680_OS_2X);
-    bme.setPressureOversampling(BME680_OS_4X);
-    bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-    //bme.setGasHeater(320, 150); // 320*C for 150 ms
-    bme.setGasHeater(0, 0); // 320*C for 150 ms
-
-
-    
     // connect to io.adafruit.com
     io.connect();
 
@@ -148,98 +113,190 @@ void setup() {
     // we are connected
     Serial.println();
     Serial.println(io.statusText());
+    StartTasks();
 
 }
 
 void loop() {
-   
-    // io.run(); is required for all sketches.
-    // it should always be present at the top of your loop
-    // function. it keeps the client connected to
-    // io.adafruit.com, and processes any incoming data.
-    io.run();
-  
-    // save count to the 'counter' feed on Adafruit IO
-   
-    unsigned long endTime = bme.beginReading();
-    if (endTime == 0) {
-        Serial.println(F("Failed to begin reading :("));
-        return;
-    }
- 
-    Serial.print(F("Reading started at "));
-    Serial.print(millis());
-    Serial.print(F(" and will finish at "));
-    Serial.println(endTime);
+    /* Let tasks do the job */   
+}
 
-    Serial.println(F("You can do other work during BME680 measurement."));
-    delay(50); // This represents parallel work.
-    // There's no need to delay() until millis() >= endTime: bme.endReading()
-    // takes care of that. It's okay for parallel work to take longer than
-    // BME680's measurement time.
 
-    // Obtain measurement results from BME680. Note that this operation isn't
-    // instantaneous even if milli() >= endTime due to I2C/SPI latency.
+void StartTasks(void){
+    void TaskReadBme680( void *pvParameters );
+    void TaskReadLight( void *pvParameters );
+    void TaskSendAio( void *pvParameters );
+    void TaskPrintValues( void *pvParameters );
 
-    if (!bme.endReading()) {
-        Serial.println(F("Failed to complete reading :("));
-        // return;
-    }
-    // Send and receive data from AIO
-    switch (iot_state) {
-        case 0:
-        case 1:
-        case 2:
-        case 3:
-        case 4:
-            select_ldr(iot_state);
-            delay(1);
-            ldr_value = analogRead(LDR_PIN);
-            Serial.print(F("LDR:  ")); Serial.print(iot_state); Serial.print(":  "); Serial.print(ldr_value); Serial.println(F(" "));  
-            ldr_feed[iot_state]->save(ldr_value);
-            break;
+    xTaskCreatePinnedToCore(
+       TaskReadBme680
+        ,  "TaskReadBme680"   // A name just for humans
+        ,  1024  // This stack size can be checked & adjusted by reading the Stack Highwater
+        ,  NULL
+        ,  2  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+        ,  NULL 
+        ,  ARDUINO_RUNNING_CORE);
 
-        case 5:
-            temperature->save(bme.temperature);
-            break;
-        case 6:    
-            humidity->save(bme.humidity);
-            break;
-    }
-    iot_state++;
-    if (iot_state > 6 ){
-      iot_state = 0;
-    } 
-    //led_red->onMessage(handleMessage);
-    
-    Serial.print(F("Reading completed at "));
-    Serial.println(millis());
+    xTaskCreatePinnedToCore(
+       TaskReadLight
+        ,  "TaskReadLight"   // A name just for humans
+        ,  1024  // This stack size can be checked & adjusted by reading the Stack Highwater
+        ,  NULL
+        ,  2  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+        ,  NULL 
+        ,  ARDUINO_RUNNING_CORE);
 
-    Serial.print(F("Temp:     ")); Serial.print(bme.temperature); Serial.println(F(" C"));
-    Serial.print(F("Hum:      ")); Serial.print(bme.humidity); Serial.println(F(" %"));
-    Serial.print(F("LDR:      ")); Serial.print(ldr_value); Serial.println(F(" "));
- 
-  // Adafruit IO is rate limited for publishing, so a delay is required in
-  // between feed->save events. In this example, we will wait three seconds
-  // (1000 milliseconds == 1 second) during each loop.
-  delay(3000);
+    xTaskCreatePinnedToCore(
+       TaskSendAio
+        ,  "TaskSendAio"   // A name just for humans
+        ,  1024  // This stack size can be checked & adjusted by reading the Stack Highwater
+        ,  NULL
+        ,  2  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+        ,  NULL 
+        ,  ARDUINO_RUNNING_CORE);
+
+    xTaskCreatePinnedToCore(
+       TaskPrintValues
+        ,  "TaskPrintValues"   // A name just for humans
+        ,  1024  // This stack size can be checked & adjusted by reading the Stack Highwater
+        ,  NULL
+        ,  2  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+        ,  NULL 
+        ,  ARDUINO_RUNNING_CORE);
+
+    aio_sema_handle = xSemaphoreCreateBinary();
+    assert(aio_sema_handle);
+    rc = xTaskCreatePinnedToCore(
+        range_task,
+        "rangetsk",
+        2048, // Stack size
+        nullptr,
+        1, // Priority
+        &h, // Task handle
+        app_cpu // CPU
+    );
+    assert(rc == pdPASS);
+    assert(h);
+
 
 }
 
-static void send_to_mqtt(void){
-    BaseType_t rc;
-    for (;;) {
-        rc = xSemaphoreTake(aio_sema_handle,0);
-        if (rc == pdPASS){
-            
+
+
+void TaskReadBme680( void *pvParameters ){
+    unsigned long endTime;
+
+
+    if (!bme.begin(0x76)) {
+        while (1){
+            Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
+            vTaskDelay(10000);
         }
+    }
+    bme.setTemperatureOversampling(BME680_OS_8X);
+    bme.setHumidityOversampling(BME680_OS_2X);
+    bme.setPressureOversampling(BME680_OS_4X);
+    bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+    //bme.setGasHeater(320, 150); // 320*C for 150 ms
+    bme.setGasHeater(0, 0); // 320*C for 150 ms
+
+    for (;;)
+    {    
+        endTime = bme.beginReading();
+        if (endTime == 0) {
+            Serial.println(F("Failed to begin reading :("));
+            return;
+        } 
         else {
-           
+            vTaskDelay(1000);     
+            if (!bme.endReading()) {
+                Serial.println(F("Failed to complete reading :("));
+                // return;
+            } else {
+                // values are now stored in the BME680 object
+            }
         }
-    
-    aio_sema
-
+        vTaskDelay(1000);     
+    }  
 }
+
+void TaskReadLight( void *pvParameters ){
+    uint8_t ldr_indx = 0;
+    
+    for (;;)
+    {    
+        ldr_value[ldr_indx] = analogRead(LDR_PIN);
+        if (++ldr_indx) >= NBR_LDR_RES ) {
+            ldr_indx = 0;
+        }
+        select_ldr(ldr_indx);
+        vTaskDelay(1000);
+    }
+}
+
+void TaskSendAio( void *pvParameters ){
+    uint8_t iot_state = 0;
+    
+    for (;;)
+    {    
+        io.run()
+        switch (iot_state) {
+            case 0: case 1: case 2: case 3: case 4:
+                if (iot_state < NBR_LDR_RES){
+                    ldr_feed[iot_state]->save(ldr_value[iot_state]);
+                }    
+                break;
+            case 5:
+                temperature->save(bme.temperature);
+                break;
+            case 6:    
+                humidity->save(bme.humidity);
+                break;
+        }
+        iot_state++;
+        if (iot_state > 6 ){
+          iot_state = 0;
+        } 
+        vTaskDelay(5000);
+    }
+}
+
+
+
+void TaskPrintValues(void){
+    //BaseType_t rc;
+    for (;;) {
+
+        Serial.print(F("Temp:     ")); Serial.print(bme.temperature); Serial.println(F(" C"));
+        Serial.print(F("Hum:      ")); Serial.print(bme.humidity); Serial.println(F(" %"));
+        Serial.print(F("LDR:      ")); Serial.print(ldr_value); Serial.println(F(" "));
+        for (uint_8 i = 0; i < NBR_LDR_RES; i++){
+            Serial.print(F("LDR:  ")); 
+            Serial.print(i); 
+            Serial.print(":  "); 
+            Serial.print(ldr_value[i]); 
+            Serial.println(F(" "));  
+        }
+        vTaskDelay(10000);
+    }     
+        //rc = xSemaphoreTake(aio_sema_handle,0);
+        //if (rc == pdPASS){   
+}
+
+void select_ldr(uint8_t ldr_idx){
+    for (uint8_t i =0;i<5;i++)
+    {
+        if(i==ldr_idx) {
+           pinMode(ldr_select_pin[i], OUTPUT); 
+           digitalWrite(ldr_select_pin[i], LOW);
+        } 
+        else {
+           pinMode(ldr_select_pin[i], INPUT);        
+        }  
+    }
+   pinMode(LED_YELLOW, OUTPUT);
+}
+
 
 void handleMessage(AdafruitIO_Data *data) {
 
