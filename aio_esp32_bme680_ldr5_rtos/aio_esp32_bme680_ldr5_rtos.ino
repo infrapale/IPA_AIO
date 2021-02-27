@@ -12,53 +12,36 @@
 
 /************************** Configuration ***********************************/
 
+#define ARDUINO_RUNNING_CORE 1
+
 // edit the config.h tab and enter your Adafruit IO credentials
 // and any additional configuration needed for WiFi, cellular,
 // or ethernet clients.
 //#define  VILLA_ASTRID 1
-#define  LILLA_ASTRID 1
+// #define  LILLA_ASTRID 1
+#define  SIIRTOLA 1
 //#include "secrets.h"
 #include "config.h"
 
 
 #include <Wire.h>
 #include <SPI.h>
+#include <WiFi.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME680.h>
 #include <bme680.h>
 #include <bme680_defs.h>
 
 //AdafruitIO_WiFi io(IO_USERNAME, IO_KEY, WIFI_SSID, WIFI_PASS);
-/*
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
-
-#define BTN_A    36
-#define BTN_B    39
-#define LED_RED      26
-#define LED_GREEN    32
-*/
 #define LED_YELLOW   33
-/*
-#define LED_BLUE     25
-#define LDR_PIN      34
-*/
 #define LDR_PIN      34
 #define NBR_LDR_RES  5
 
 #define SEALEVELPRESSURE_HPA (1013.25)
 
 Adafruit_BME680 bme; // I2C
-byte            iot_state = 0;
-/************************ Example Starts Here *******************************/
-
-// this int will hold the current count for our sketch
-int count = 0;
-uint16_t   ldr_value[NBR_LDR_RES];
-uint8_t ldr_select_pin[NBR_LDR_RES] = {15,16,17,18,19};
+uint16_t        ldr_value[NBR_LDR_RES];
+uint8_t         ldr_select_pin[NBR_LDR_RES] = {15,16,17,18,19};
 
 // set up the 'counter' feed
 AdafruitIO_Feed *temperature = io.feed("villaastrid.tupa-bme680-temp");
@@ -75,7 +58,7 @@ AdafruitIO_Feed *ldr_feed[] = {
 
 
 static SemaphoreHandle_t  aio_sema_handle;
-void StartTasks(void){
+void StartTasks(void);
 void TaskReadBme680( void *pvParameters );
 void TaskReadLight( void *pvParameters );
 void TaskSendAio( void *pvParameters );
@@ -88,11 +71,9 @@ void select_ldr(uint8_t ldr_idx);
 
 void setup() {
     BaseType_t rc;
-    // start the serial connection
-    Serial.begin(115200);
-
-    // wait for serial monitor to open
-    while(! Serial);
+    
+    Serial.begin(115200);  
+    while(! Serial);   // wait for serial monitor to open
 
     pinMode(LED_YELLOW, OUTPUT);
     digitalWrite(LED_YELLOW,LOW);
@@ -101,7 +82,6 @@ void setup() {
     select_ldr(0);
 
     Serial.print("Connecting to Adafruit IO");
-    // connect to io.adafruit.com
     io.connect();
 
     // wait for a connection
@@ -123,20 +103,18 @@ void loop() {
 
 
 void StartTasks(void){
-    void TaskReadBme680( void *pvParameters );
-    void TaskReadLight( void *pvParameters );
-    void TaskSendAio( void *pvParameters );
-    void TaskPrintValues( void *pvParameters );
-
+    BaseType_t rc;
+   
     xTaskCreatePinnedToCore(
        TaskReadBme680
         ,  "TaskReadBme680"   // A name just for humans
-        ,  1024  // This stack size can be checked & adjusted by reading the Stack Highwater
+        ,  8000  // This stack size can be checked & adjusted by reading the Stack Highwater
         ,  NULL
         ,  2  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
         ,  NULL 
         ,  ARDUINO_RUNNING_CORE);
-
+    
+   
     xTaskCreatePinnedToCore(
        TaskReadLight
         ,  "TaskReadLight"   // A name just for humans
@@ -145,16 +123,16 @@ void StartTasks(void){
         ,  2  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
         ,  NULL 
         ,  ARDUINO_RUNNING_CORE);
-
+    
     xTaskCreatePinnedToCore(
        TaskSendAio
         ,  "TaskSendAio"   // A name just for humans
-        ,  1024  // This stack size can be checked & adjusted by reading the Stack Highwater
+        ,  32000  // This stack size can be checked & adjusted by reading the Stack Highwater
         ,  NULL
-        ,  2  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+        ,  4  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
         ,  NULL 
         ,  ARDUINO_RUNNING_CORE);
-
+    
     xTaskCreatePinnedToCore(
        TaskPrintValues
         ,  "TaskPrintValues"   // A name just for humans
@@ -163,7 +141,8 @@ void StartTasks(void){
         ,  2  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
         ,  NULL 
         ,  ARDUINO_RUNNING_CORE);
-
+    
+    /*
     aio_sema_handle = xSemaphoreCreateBinary();
     assert(aio_sema_handle);
     rc = xTaskCreatePinnedToCore(
@@ -177,7 +156,7 @@ void StartTasks(void){
     );
     assert(rc == pdPASS);
     assert(h);
-
+    */
 
 }
 
@@ -189,7 +168,7 @@ void TaskReadBme680( void *pvParameters ){
 
     if (!bme.begin(0x76)) {
         while (1){
-            Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
+            Serial.println("Could not find a valid BME680 sensor, check wiring!");
             vTaskDelay(10000);
         }
     }
@@ -201,16 +180,16 @@ void TaskReadBme680( void *pvParameters ){
     bme.setGasHeater(0, 0); // 320*C for 150 ms
 
     for (;;)
-    {    
+    {   
         endTime = bme.beginReading();
         if (endTime == 0) {
-            Serial.println(F("Failed to begin reading :("));
-            return;
+            Serial.println("Failed to begin reading :(");
+            //return;
         } 
         else {
             vTaskDelay(1000);     
             if (!bme.endReading()) {
-                Serial.println(F("Failed to complete reading :("));
+                Serial.println("Failed to complete reading :(");
                 // return;
             } else {
                 // values are now stored in the BME680 object
@@ -226,7 +205,7 @@ void TaskReadLight( void *pvParameters ){
     for (;;)
     {    
         ldr_value[ldr_indx] = analogRead(LDR_PIN);
-        if (++ldr_indx) >= NBR_LDR_RES ) {
+        if (++ldr_indx >= NBR_LDR_RES ) {
             ldr_indx = 0;
         }
         select_ldr(ldr_indx);
@@ -239,7 +218,7 @@ void TaskSendAio( void *pvParameters ){
     
     for (;;)
     {    
-        io.run()
+        io.run();
         switch (iot_state) {
             case 0: case 1: case 2: case 3: case 4:
                 if (iot_state < NBR_LDR_RES){
@@ -257,25 +236,23 @@ void TaskSendAio( void *pvParameters ){
         if (iot_state > 6 ){
           iot_state = 0;
         } 
-        vTaskDelay(5000);
+        vTaskDelay(2000);
     }
 }
 
 
-
-void TaskPrintValues(void){
+void TaskPrintValues(void *pvParameters ){
     //BaseType_t rc;
     for (;;) {
 
-        Serial.print(F("Temp:     ")); Serial.print(bme.temperature); Serial.println(F(" C"));
-        Serial.print(F("Hum:      ")); Serial.print(bme.humidity); Serial.println(F(" %"));
-        Serial.print(F("LDR:      ")); Serial.print(ldr_value); Serial.println(F(" "));
-        for (uint_8 i = 0; i < NBR_LDR_RES; i++){
-            Serial.print(F("LDR:  ")); 
+        Serial.print("Temp:     "); Serial.print(bme.temperature); Serial.println(" C");
+        Serial.print("Hum:      "); Serial.print(bme.humidity); Serial.println(" %");
+        for (uint8_t i = 0; i < NBR_LDR_RES; i++){
+            Serial.print("LDR:  "); 
             Serial.print(i); 
             Serial.print(":  "); 
             Serial.print(ldr_value[i]); 
-            Serial.println(F(" "));  
+            Serial.println(" ");  
         }
         vTaskDelay(10000);
     }     

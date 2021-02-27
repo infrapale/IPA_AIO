@@ -83,7 +83,7 @@ void setup() {
     Serial.print("Connecting to Adafruit IO");
     Serial.println(F("BME680 test"));
     delay(2000);
-    if (!bme.begin()) {
+    if (!bme.begin(0x76)) {
         Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
         while (1);
     }
