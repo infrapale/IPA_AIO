@@ -19,7 +19,7 @@
 #define  LILLA_ASTRID 1
 #include "config.h"
 
-#include "secrets.h"
+//#include "secrets.h"
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
@@ -83,7 +83,7 @@ void setup() {
     Serial.print("Connecting to Adafruit IO");
     Serial.println(F("BME680 test"));
     delay(2000);
-    if (!bme.begin(0x76)) {
+    if (!bme.begin(0x77)) {
         Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
         while (1);
     }
@@ -128,8 +128,27 @@ void setup() {
 
     // wait for a connection
     while(io.status() < AIO_CONNECTED) {
-        Serial.print(".");
-        delay(500);
+        switch (io.status()) 
+        {
+            case AIO_IDLE: Serial.println(F("Waiting for connection establishement")); break;  
+            case AIO_NET_DISCONNECTED: Serial.println(F("Network disconnected")); break;
+            case AIO_DISCONNECTED: Serial.println(F("Disconnected from Adafruit IO")); break;
+            case AIO_FINGERPRINT_UNKOWN: Serial.println(F("Unknown AIO_SSL_FINGERPRINT")); break;
+            case AIO_NET_CONNECT_FAILED: Serial.println(F("Failed to connect to network")); break;
+            case AIO_CONNECT_FAILED: Serial.println(F("Failed to connect to Adafruit IO")); break; 
+            case AIO_FINGERPRINT_INVALID: Serial.println(F("Unknown AIO_SSL_FINGERPRINT")); break; 
+            case AIO_AUTH_FAILED: Serial.println(F("Invalid Adafruit IO login credentials provided")); break; 
+            case AIO_SSID_INVALID: Serial.println(F("SSID is "" or otherwise invalid, connection not attempted")); break;
+
+            case AIO_NET_CONNECTED: Serial.println(F("Connected to Adafruit IO")); break; 
+            case AIO_CONNECTED: Serial.println(F(" Connected to network")); break; 
+            case AIO_CONNECTED_INSECURE: Serial.println(F("Insecurely (non-SSL) connected to network")); break; 
+            case AIO_FINGERPRINT_UNSUPPORTED: Serial.println(F("Unsupported AIO_SSL_FINGERPRINT")); break; 
+            case AIO_FINGERPRINT_VALID: Serial.println(F("Valid AIO_SSL_FINGERPRINT")); break;    
+            default: Serial.println(F("Unkown AIO status")); break;
+        }
+       
+        delay(5000);
     }
 
     // we are connected
@@ -149,6 +168,8 @@ void loop() {
     // save count to the 'counter' feed on Adafruit IO
    
     unsigned long endTime = bme.beginReading();
+    static uint8_t feed_indx = 0;
+    
     if (endTime == 0) {
         Serial.println(F("Failed to begin reading :("));
         return;
@@ -159,7 +180,6 @@ void loop() {
     Serial.print(F(" and will finish at "));
     Serial.println(endTime);
 
-    Serial.println(F("You can do other work during BME680 measurement."));
     delay(50); // This represents parallel work.
     // There's no need to delay() until millis() >= endTime: bme.endReading()
     // takes care of that. It's okay for parallel work to take longer than
@@ -173,11 +193,22 @@ void loop() {
         return;
     }
     // Send and receive data from AIO
-    temperature->save(bme.temperature);
-    humidity->save(bme.humidity);
-    ldr_value = analogRead(LDR_PIN);
-    ldr_feed->save(ldr_value);
-    led_red->onMessage(handleMessage);
+    switch(feed_indx)
+    {
+        case 0:
+            temperature->save(bme.temperature);
+            break;
+        case 1:
+            humidity->save(bme.humidity);
+            break;
+        case 2:
+            ldr_value = analogRead(LDR_PIN);
+            ldr_feed->save(ldr_value);
+            //led_red->onMessage(handleMessage);
+            break;
+    }
+    feed_indx++;
+    if (feed_indx > 2) feed_indx = 0;
     
     Serial.print(F("Reading completed at "));
     Serial.println(millis());
@@ -191,10 +222,8 @@ void loop() {
     display.print(F("LDR:      ")); display.print(ldr_value); display.println(F(" "));
     display.display();
  
-  // Adafruit IO is rate limited for publishing, so a delay is required in
-  // between feed->save events. In this example, we will wait three seconds
-  // (1000 milliseconds == 1 second) during each loop.
-  delay(60000);
+ 
+   delay(1*60*1000);
 
 }
 
